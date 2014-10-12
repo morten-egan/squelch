@@ -17,8 +17,9 @@ class Squelch(cmd.Cmd):
 		cmd.Cmd.__init__(self)
 		self.connstring = ''
 		self.intro = introText
-		self.setPrompt()
 		self.initSquelch()
+		# Lastly set the prompt and open up for business
+		self.setPrompt()
 
 	def emptyline(self):
 		pass
@@ -29,14 +30,14 @@ class Squelch(cmd.Cmd):
 		self.sqParms['allows'] = {}
 		self.sqParms['connections'] = {}
 		self.sqParms['spools'] = {}
-		self.sqParms['cwd'] = '/home/morten/Kode/Projects/squelch'
+		self.sqParms['cwd'] = os.path.dirname(os.path.abspath(__file__))
 		# Set defaults
 		self.sqParms['allows']['DROP'] = False
 		self.sqParms['allows']['TRUNCATE'] = False
 		self.sqParms['allows']['SHUTDOWN'] = False
 
 	def setPrompt(self):
-		self.prompt = 'Squelch [' + self.connstring + ']=> '
+		self.prompt = 'Squelch [' + self.sqParms['cwd'] + '][' + self.connstring + ']> '
 
 	def do_ls(self, args):
 		os.system('ls ' + args + ' ' + self.sqParms['cwd'])
@@ -51,14 +52,44 @@ class Squelch(cmd.Cmd):
 	def do_strace(self, args):
 		os.system('strace ' + args)
 
+	def do_pstack(self, args):
+		os.system('pstack ' + args)
+
+	def do_lsof(self, args):
+		os.system('lsof ' + args)
+
+	def do_ps(self, args):
+		os.system('ps ' + args)
+
+	def do_vi(self, args):
+		os.system('vi ' + args)
+
 	def do_pwd(self, args):
 		print self.sqParms['cwd']
 
+	def do_top(self, args):
+		os.system('top')
+
+	def complete_cd(self, text, line, begidx, endidx):
+		dirlist = [name for name in os.listdir(self.sqParms['cwd']) if os.path.isdir(os.path.join(self.sqParms['cwd'], name))]
+		return [i for i in dirlist if i.startswith(text)]
+
 	def do_cd(self, args):
 		if args[:1] == '/':
-			self.sqParms['cwd'] = args
+			if args[-1:] == '/':
+				self.sqParms['cwd'] = args[:-1]
+			else:
+				self.sqParms['cwd'] = args
+		elif args == '..':
+			sls = self.sqParms['cwd'].rfind('/')
+			self.sqParms['cwd'] = self.sqParms['cwd'][:sls]
+		elif args == '.':
+			pass
+		elif args[:1] == '$':
+			self.sqParms['cwd'] = os.environ[args[1:]]
 		else:
-			self.sqParms['cwd'] = self.sqParms['cwd'] + args
+			self.sqParms['cwd'] = self.sqParms['cwd'] + '/' + args
+		self.setPrompt()
 
 	def do_exit(self, args):
 		'Exit Squelch'
