@@ -4,6 +4,9 @@ import os
 import cmd
 import readline
 from subprocess import Popen, PIPE
+import Queue
+import squelchProcessThread
+import squelchTail
 
 # Define intro text
 introText = '''===============================================
@@ -31,6 +34,7 @@ class Squelch(cmd.Cmd):
 		self.sqParms['connections'] = {}
 		self.sqParms['spools'] = {}
 		self.sqParms['cwd'] = os.path.dirname(os.path.abspath(__file__))
+		self.sqParms['tailers'] = []
 		# Set defaults
 		self.sqParms['allows']['DROP'] = False
 		self.sqParms['allows']['TRUNCATE'] = False
@@ -38,6 +42,19 @@ class Squelch(cmd.Cmd):
 
 	def setPrompt(self):
 		self.prompt = 'Squelch [' + self.sqParms['cwd'] + '][' + self.connstring + ']> '
+
+	def createSqlplus(self, user, passw, tns):
+		connectionObject = {}
+		if tns:
+			cstring = user + '/' + passw + '@' + tns
+		else:
+			cstring = user + '/' + passw
+		# Create the actual sqlplus process and get descriptor
+		connectionObject['sqlplusprocess'] = Popen(['sqlplus', '-s', cstring], stdin=PIPE, stdout=PIPE)
+
+	# Public commands
+	def do_set(self, args):
+		splArgs = args.split(' ')
 
 	def do_ls(self, args):
 		os.system('ls ' + args + ' ' + self.sqParms['cwd'])
@@ -73,6 +90,20 @@ class Squelch(cmd.Cmd):
 	def complete_cd(self, text, line, begidx, endidx):
 		dirlist = [name for name in os.listdir(self.sqParms['cwd']) if os.path.isdir(os.path.join(self.sqParms['cwd'], name))]
 		return [i for i in dirlist if i.startswith(text)]
+
+	def do_stail(self, args):
+		'Squelch tail, which runs in the background. Automatically opens squelch output console'
+		argSpl = args.split(' ')
+		tailObject = {}
+		tailObject['name'] = args
+		if len(argSpl) > 1:
+			tailObject['tailThread'] = squelchTail.squelchTailer(argSpl[1], argSpl[0])
+		else:
+			tailObject['tailThread'] = squelchTail.squelchTailer(argSpl[0])
+		# Start the tail process
+		tailObject['tailThread'].start()
+		# Add the tail object to the tailers list
+		self.sqParms['tailers'].append(tailObject)
 
 	def do_cd(self, args):
 		if args[:1] == '/':
