@@ -1,6 +1,8 @@
 # Squelch tail process
 import threading
 from subprocess import Popen, PIPE
+import sys
+import os
 
 class squelchTailer(threading.Thread):
 	"""Simple wrapper for tail, so you can tail files outside of main process
@@ -13,17 +15,19 @@ class squelchTailer(threading.Thread):
 		self.host = host
 		self.stoprequest = threading.Event()
 		self.P = None
+		self.daemon = True
 
 	def run(self):
-		if host:
-			tailCommand = ['ssh', '-t', host, 'tail', '-f', self.filepath]
+		if self.host:
+			tailCommand = ['ssh', '-t', self.host, 'tail', '-f', self.filepath]
 		else:
 			tailCommand = ['tail', '-f', self.filepath]
 		self.P = Popen(tailCommand, stdin=PIPE, stdout=PIPE)
-		while not self.stoprequest:
-			# Read from stdin continuesly and print
-			pass
+		for line in iter(self.P.stdout.readline, ''):
+			if line != '':
+				print self.OKBLUE + self.filepath + '-> ' + self.ENDC + line.rstrip(os.linesep)
 
-	def join(self):
+	def join(self, timeout=None):
+		self.P.kill()
 		self.stoprequest.set()
 		super(squelchTailer, self).join(timeout)

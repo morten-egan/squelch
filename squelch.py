@@ -7,12 +7,23 @@ from subprocess import Popen, PIPE
 import Queue
 import squelchProcessThread
 import squelchTail
+import sys
+import orahelper
 
 # Define intro text
-introText = '''===============================================
-== Welcome to Squelch
-== SQL plus a bit more
-==============================================='''
+introText = '''
+
+ _______  _______           _______  _        _______          
+(  ____ \(  ___  )|\     /|(  ____ \( \      (  ____ \|\     /|
+| (    \/| (   ) || )   ( || (    \/| (      | (    \/| )   ( |
+| (_____ | |   | || |   | || (__    | |      | |      | (___) |
+(_____  )| |   | || |   | ||  __)   | |      | |      |  ___  |
+      ) || | /\| || |   | || (      | |      | |      | (   ) |
+/\____) || (_\ \ || (___) || (____/\| (____/\| (____/\| )   ( |
+\_______)(____\/_)(_______)(_______/(_______/(_______/|/     \|
+                                                               
+                 Because sql++ was already taken!
+'''
 
 class Squelch(cmd.Cmd):
 
@@ -35,22 +46,27 @@ class Squelch(cmd.Cmd):
 		self.sqParms['spools'] = {}
 		self.sqParms['cwd'] = os.path.dirname(os.path.abspath(__file__))
 		self.sqParms['tailers'] = []
+		self.sqParms['keepConnections'] = True
+		self.sqParms['dblist_tns'] = []
+		self.sqParms['dblist_oratab'] = []
+		self.sqParms['dblist_process'] = []
 		# Set defaults
 		self.sqParms['allows']['DROP'] = False
 		self.sqParms['allows']['TRUNCATE'] = False
 		self.sqParms['allows']['SHUTDOWN'] = False
+		# Run preparation and init functions
+		self.oraPrepare()
 
 	def setPrompt(self):
 		self.prompt = 'Squelch [' + self.sqParms['cwd'] + '][' + self.connstring + ']> '
 
-	def createSqlplus(self, user, passw, tns):
-		connectionObject = {}
-		if tns:
-			cstring = user + '/' + passw + '@' + tns
-		else:
-			cstring = user + '/' + passw
-		# Create the actual sqlplus process and get descriptor
-		connectionObject['sqlplusprocess'] = Popen(['sqlplus', '-s', cstring], stdin=PIPE, stdout=PIPE)
+	def writeEmpty(self):
+		print ''
+
+	def oraPrepare(self):
+		self.sqParms['dblist_tns'] = orahelper.getTNSList('/home/morten/tns/tnsnames.ora')
+		self.sqParms['dblist_oratab'] = orahelper.getOratabList('/home/morten/tns/oratab')
+		self.sqParms['dblist_process'] = orahelper.getOraRunningList()
 
 	# Public commands
 	def do_set(self, args):
@@ -104,6 +120,11 @@ class Squelch(cmd.Cmd):
 		tailObject['tailThread'].start()
 		# Add the tail object to the tailers list
 		self.sqParms['tailers'].append(tailObject)
+		print ''
+
+	def do_tails(self, args):
+		for tailer in self.sqParms['tailers']:
+			print tailer['name']
 
 	def do_cd(self, args):
 		if args[:1] == '/':
@@ -122,10 +143,44 @@ class Squelch(cmd.Cmd):
 			self.sqParms['cwd'] = self.sqParms['cwd'] + '/' + args
 		self.setPrompt()
 
+	def complete_ldb(self, text, line, begidx, endidx):
+		return [i for i in self.sqParms['tnslist'] if i.startswith(text)]
+
+	def do_ldb(self, args):
+		try:
+			for database in self.sqParms['dblist_tns']:
+				print database
+		except:
+			pass
+		try:
+			for database in self.sqParms['dblist_oratab']:
+				print database
+		except:
+			pass
+		try:
+			for database in self.sqParms['dblist_process']:
+				print database
+		except:
+			pass
+
+	def do_sqlplus(self, args):
+		connectionObject = {}
+		connectionObject['inputQueue'] = Queue.Queue()
+		connectionObject['outputQueue'] = Queue.Queue()
+		connectionObject['squelchPlus'] = squelchProcessThread.squelchProcessThread(args, connectionObject['inputQueue'], connectionObject['outputQueue'])
+		# Start the sqlplus process and Squelch controller thread
+		# connectionObject['squelchPlus'].start()
+		# Add to connection list
+		self.sqParms['connections']['DBNAME'] = connectionObject
+
 	def do_exit(self, args):
 		'Exit Squelch'
+		# Clean up tailers
+		for tailer in self.sqParms['tailers']:
+			tailer['tailThread'].join()
 		return -1
 
 if __name__ == '__main__':
+	os.system('clear')
 	cmdline = Squelch()
 	cmdline.cmdloop()

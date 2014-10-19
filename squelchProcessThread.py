@@ -10,14 +10,17 @@ class squelchProcessThread(threading.Thread):
 	and write the output to the main console
 	"""
 
-	def __init__(self, command, inputQueue):
+	def __init__(self, command, inputQueue, outputQueue):
 		super(squelchProcessThread, self).__init__()
 		self.stoprequest = threading.Event()
-		self.command = command
+		self.command = command.split(' ')
 		self.inputQueue = inputQueue
+		self.outputQueue = outputQueue
 		self.P = None
 
 	def spawnProcess(self):
+		self.command.insert(0, '-S')
+		self.command.insert(0, '-sqlplus')
 		self.P = Popen(self.command, stdin=PIPE, stdout=PIPE)
 
 	def run(self):
@@ -34,3 +37,10 @@ class squelchProcessThread(threading.Thread):
 
 	def _submitExec(self, command):
 		self.P.stdin.write(command)
+		# Now that the command is written, grab the output and display it
+		while True:
+			line = self.P.stdout.readline()
+			if line != '':
+				print line
+			else:
+				break
